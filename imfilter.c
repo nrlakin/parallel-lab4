@@ -258,12 +258,13 @@ int main(int argc, char **argv) {
   imArray = loadRGBImage(&pamImage, &pamMask);
   printf("finished loading\n");
 
-  window_t my_window;
-  pixel_t ** sub_im;
-  int height, width;
 
-  #pragma omp parallel num_threads(n_threads) private(sub_im, my_window, height, width)
+  #pragma omp parallel num_threads(n_threads) private(outputImage)
   {
+    window_t my_window;
+    pixel_t ** sub_im;
+    int height, width, totalpad;
+
     int my_thread = omp_get_thread_num();
     int n_proc = omp_get_num_threads();
     printf("I am thread %d of %d\n", my_thread, n_proc);
@@ -271,9 +272,10 @@ int main(int argc, char **argv) {
     sub_im = copyImgMatrix(imArray, &my_window);
     int height = (my_window.i_end - my_window.i_start - 1);
     int width = (my_window.j_end - my_window.j_start - 1);
-    outputImage = convolve(sub_im, height, width, pamImage.maxval, kerArray, &pamMask);
+    int totalpad = my_window.lt_pad + my_window.rb_pad;
+    outputImage = convolve(sub_im, height-totalpad, width-totalpad, pamImage.maxval, kerArray, &pamMask);
     freeRGBImage(sub_im, height);
-    printf("finished convolution\n");
+    freeRGBImage(outputImage, height-totalpad);
   }
   // CLUNKY
   rewind(imageFile);
