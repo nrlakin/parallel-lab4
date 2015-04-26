@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <omp.h>
+#include <math.h>
 #include <netpbm/pam.h>
 
 typedef struct pixel_struct {
@@ -13,6 +14,13 @@ typedef struct pixel_struct {
     int vector[3];
   };
 } pixel_t;
+
+int get_start_i(int n_proc, int proc_id, int kern_width, struct pam * pamImage) {
+    int n_rows = (int)sqrt(n_proc);
+    int n_columns = n_proc/n_rows;
+    int i_start, i_stop, j_start, j_stop;
+    
+}
 
 pixel_t ** loadRGBImage(struct pam * pamImage) {
   tuple *tuplerow;
