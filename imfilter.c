@@ -78,8 +78,20 @@ void freeKernel(double ** image, struct pam * pamImage) {
   free(image);
 }
 
+int getPixel(double temp_pixel, double ksum, int maxval) {
+  if (ksum <= 0) ksum = 1;
+  temp_pixel /= ksum;
+  if (temp_pixel > maxval) {
+    temp_pixel = maxval;
+  } else if (temp_pixel < 0){
+    temp_pixel = 0;
+  }
+  return (int) temp_pixel;
+}
+
 pixel_t ** convolve(pixel_t **image, struct pam * pamImage, double **kernel, struct pam * pamKernel) {
-  int i, j, k, ik, jk;
+  int i, j, k, ik, jk, ii, jj, target_i, target_j;
+  double ksum = 0;
   int center_x = pamKernel->width/2;
   int center_y = pamKernel->height/2;
   printf("kernel center_x: %d\n", center_x);
@@ -93,18 +105,26 @@ pixel_t ** convolve(pixel_t **image, struct pam * pamImage, double **kernel, str
       temp_result_r = 0;
       temp_result_g = 0;
       temp_result_b = 0;
+      ksum = 0;
       for (ik = 0; ik < pamKernel->height; ik++) {
-        if ((i-center_y + ik)) continue;
+        // using algorithm where we multiply by flipped kernel
+        ii = pamKernel->height - 1 - ik;
         for (jk = 0; jk < pamKernel->width; jk++) {
-          if ((j - center_x + jk) < 0) continue;
-          temp_result_r += (double)image[i-center_y+ik][j-center_x+jk].vector[0]*kernel[ik][jk];
-          temp_result_g += (double)image[i-center_y+ik][j-center_x+jk].vector[1]*kernel[ik][jk];
-          temp_result_b += (double)image[i-center_y+ik][j-center_x+jk].vector[2]*kernel[ik][jk];
+          // using algorithm where we multiply by flipped kernel
+          jj = pamKernel->width - 1 - jk;
+          target_i = i + (ik - center_y);
+          target_j = j + (jk - center_x);
+          if (target_i >= 0 && target_i < pamImage->height && target_j >= 0 && target_j < pamImage->width){
+            temp_result_r += ((double)image[target_i][target_j].vector[0])*kernel[ii][jj];
+            temp_result_g += ((double)image[target_i][target_j].vector[1])*kernel[ii][jj];
+            temp_result_b += ((double)image[target_i][target_j].vector[2])*kernel[ii][jj];
+            ksum += kernel[ik][jk];
+          }
         }
       }
-      result[i][j].r = temp_result_r;
-      result[i][j].g = temp_result_g;
-      result[i][j].b = temp_result_b;
+      result[i][j].r = getPixel(temp_result_r, ksum, pamImage->maxval);
+      result[i][j].g = getPixel(temp_result_g, ksum, pamImage->maxval);
+      result[i][j].b = getPixel(temp_result_b, ksum, pamImage->maxval);
     }
   }
   return result;
