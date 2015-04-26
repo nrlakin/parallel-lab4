@@ -230,6 +230,21 @@ pixel_t ** copyImgMatrix(pixel_t ** whole_img, window_t * window) {
   return sub_img;
 }
 
+void copyBack(pixel_t ** subImage, pixel_t ** destImage, window_t * window) {
+  int i_start = window->i_start + window->lt_pad;
+  int i_end = window->i_end - window->rb_pad;
+  int j_start = window->j_start + window->lt_pad;
+  int j_end = window->j_end - window_rb_pad;
+  int i, j, k;
+  for (i = i_start; i < i_end; i++) {
+    for (j = j_start; j < j_end; j++) {
+      for (k = 0; k < 3; k++) {
+        destImage[i][j].vector[k] = subImage[i-i_start][j-j_start].vector[k];
+      }
+    }
+  }
+}
+
 int main(int argc, char **argv) {
   int opt;
   struct pam pamImage, pamMask, pamOutput;
@@ -259,7 +274,7 @@ int main(int argc, char **argv) {
   printf("finished loading\n");
 
 
-  #pragma omp parallel num_threads(n_threads)
+  #pragma omp parallel num_threads(n_threads) shared(imArray)
   {
     window_t my_window;
     pixel_t ** sub_im, ** sub_out;
@@ -276,6 +291,10 @@ int main(int argc, char **argv) {
     sub_out = convolve(sub_im, height-totalpad, width-totalpad, pamImage.maxval, kerArray, &pamMask);
 
     // stitch here
+  #pragma omp critical
+  {
+    copyResult(sub_out, imArray, &window);
+  }
 
     freeRGBImage(sub_im, height);
     freeRGBImage(sub_out, height-totalpad);
@@ -284,7 +303,7 @@ int main(int argc, char **argv) {
   // CLUNKY
   rewind(imageFile);
   pnm_readpaminit(imageFile, &pamImage, PAM_STRUCT_SIZE(tuple_type));
-  // writeMatrixToFile(&pamOutput, outputImage, &pamImage, pamImage.height, pamImage.width);
+  writeMatrixToFile(&pamOutput, imArray, &pamImage, pamImage.height, pamImage.width);
 
   freeRGBImage(imArray, getTotal(pamMask.height, pamImage.height));
   // freeRGBImage(outputImage, pamImage.height);
