@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <omp.h>
 #include <math.h>
+#include <unistd.h>
 #include <netpbm/pam.h>
 
 typedef struct pixel_struct {
@@ -15,11 +16,33 @@ typedef struct pixel_struct {
   };
 } pixel_t;
 
-int get_start_i(int n_proc, int proc_id, int kern_width, struct pam * pamImage) {
+typedef struct {
+  int i_start;
+  int i_end;
+  int j_start;
+  int j_end;
+} window_t;
+
+void getWindow(window_t * destPtr, int n_proc, int proc_id, struct pam * pamKernel, struct pam * pamImage) {
     int n_rows = (int)sqrt(n_proc);
     int n_columns = n_proc/n_rows;
-    int i_start, i_stop, j_start, j_stop;
+    int kern_width = pamKernel->width;
+    int kern_height = pamKernel->height;
+    int i_start, i_end, j_start, j_end;
+    int left_top_pad = getSmallPad(kern_width);
+    int right_bottom_pad = kern_width/2;
+    int x_offset = pamImage->width/n_columns;
+    int y_offset = pamImage->height/n_rows;
+    int row_index = proc_id/n_rows;
+    int col_index = proc_id%n_columns;
 
+    i_start = row_index * y_offset;
+    i_end = (row_index + 1) * y_offset + left_top_pad + right_bottom_pad;
+    i_end = (row_index == n_rows-1) ? getTotal(kern_height, pamImage->height) : i_end;
+
+    j_start = col_index * x_offset;
+    j_end = (col_index + 1) * x_offset + left_top_pad + right_bottom_pad;
+    j_end = (col_index == n_columns - 1) ? getTotal(kern_width, pamImage->width) : j_end;
 }
 
 int getSmallPad(int MaskDim) {
@@ -182,14 +205,24 @@ void writeMatrixToFile(struct pam * outPam, pixel_t **image, struct pam * imgPam
 }
 
 int main(int argc, char **argv) {
+  int opt;
   struct pam pamImage, pamMask, pamOutput;
   pm_init(argv[0],0);
   pixel_t ** imArray, ** outputImage;
   double ** kerArray;
+  char *infile, *outfile;
+
+  //while ((opt = getopt(argc, argv, "oin")) != -1) {
+  //  switch(opt) {
+  //    case 'o': outfile =
+  //  }
+  //}
   //FILE * imageFile = fopen("StopSign2.ppm", "r");
   FILE * imageFile = fopen(argv[1], "r");
   FILE * maskFile = fopen("gaussian.pgm","r");
   FILE * output = fopen(argv[2], "w");
+  int n_threads = atoi(argv[3]);
+  int n_iter = atoi(argv[4]);
   pnm_readpaminit(imageFile, &pamImage, PAM_STRUCT_SIZE(tuple_type));
   pnm_readpaminit(maskFile, &pamMask, PAM_STRUCT_SIZE(tuple_type));
   pamOutput = pamImage;
@@ -199,7 +232,21 @@ int main(int argc, char **argv) {
   imArray = loadRGBImage(&pamImage, &pamMask);
   printf("finished loading\n");
 
-  outputImage = convolve(imArray, &pamImage, kerArray, &pamMask);
+#pragma omp parallel num_threads(n_threads)
+  {
+    window_t my_window;
+    int my_thread = omp_get_thread_num();
+    int n_proc = omp_get_num_threads();
+    printf("I am thread %d of %d\n", my_thread, n_proc);
+
+    getWindow(&my_window, n_proc, my_thread, &pamMask, &pamImage);
+
+    //outputImage = convolve(imArray, &pamImage, kerArray, &pamMask);
+
+
+
+
+  }
   // CLUNKY
   rewind(imageFile);
   pnm_readpaminit(imageFile, &pamImage, PAM_STRUCT_SIZE(tuple_type));
