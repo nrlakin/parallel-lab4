@@ -5,9 +5,14 @@
 #include <netpbm/pam.h>
 
 typedef struct pixel_struct {
-  int r;
-  int g;
-  int b;
+  union {
+    struct {
+        int r;
+        int g;
+        int b;
+    };
+    int vector[3];
+  };
 } pixel_t;
 
 pixel_t ** loadRGBImage(struct pam * pamImage) {
@@ -55,15 +60,15 @@ pixel_t ** convolve(pixel_t **image, struct pam * pamImage, double **kernel, str
 
   pixel_t ** result = (pixel_t**) malloc(sizeof(pixel_t*)*(pamImage->height));
   for(i = center_y; i < pamImage->height-center_y; i++) {
-    result[i] = (pixel_t*) malloc(sizeof(pixel_t)*width);
+    result[i] = (pixel_t*) malloc(sizeof(pixel_t)*pamImage->width);
     for (j = center_x; j < pamImage->width-center_x; j++) {
       temp_result = 0;
       for (ik = 0; ik < pamKernel->height; ik++) {
         for (jk = 0; jk < pamKernel->width; jk++) {
-          temp_result += image[i-center_y+ik][j - center_x + jk]*kernel[ik,jk];
+          temp_result += image[i-center_y+ik][j - center_x + jk].vector[0]*kernel[ik][jk];
         }
       }
-      result[i][j] = temp_result;
+      result[i][j].vector[0] = temp_result;
     }
   }
   return result;
