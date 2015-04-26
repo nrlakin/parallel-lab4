@@ -155,8 +155,8 @@ pixel_t ** convolve(pixel_t **image, int img_height, int img_width, int img_maxv
   double ksum = 0;
   int center_x = pamKernel->width/2;
   int center_y = pamKernel->height/2;
-  printf("kernel center_x: %d\n", center_x);
-  printf("kernel center_y: %d\n", center_y);
+  // printf("kernel center_x: %d\n", center_x);
+  // printf("kernel center_y: %d\n", center_y);
   double temp_result_r, temp_result_g, temp_result_b;
 
   int width = getTotal(pamKernel->width, img_width);
@@ -168,6 +168,7 @@ pixel_t ** convolve(pixel_t **image, int img_height, int img_width, int img_maxv
   for(i = topPad; i < (topPad + img_height); i++) {
     result[i-topPad] = (pixel_t*) malloc(sizeof(pixel_t)*img_width);
     for (j = leftPad; j < (leftPad + img_width); j++) {
+      printf("working on px: %d, %d\n", i, j);
       temp_result_r = 0;
       temp_result_g = 0;
       temp_result_b = 0;
@@ -217,7 +218,7 @@ pixel_t ** copyImgMatrix(pixel_t ** whole_img, window_t * window) {
   printf("window gotten: %d, %d, %d, %d\n", window->i_start, window->i_end,window->j_start,window->j_end);
   int height = (window->i_end - window->i_start - 1);
   int width = (window->j_end - window->j_start - 1);
-  printf("mallocing window rows\n");
+  // printf("mallocing window rows\n");
   pixel_t ** sub_img = (pixel_t**) malloc(sizeof(pixel_t*)*(height));
   for (i = window->i_start; i < window->i_end; i++) {
     sub_img[i] = (pixel_t*)malloc(sizeof(pixel_t)*width);
@@ -285,6 +286,7 @@ int main(int argc, char **argv) {
     printf("I am thread %d of %d\n", my_thread, n_proc);
     getWindow(&my_window, n_threads, my_thread, &pamMask, &pamImage);
     sub_im = copyImgMatrix(imArray, &my_window);
+    printf("window copied\n");
     height = (my_window.i_end - my_window.i_start);
     width = (my_window.j_end - my_window.j_start);
     totalpad = my_window.lt_pad + my_window.rb_pad;
