@@ -33,8 +33,8 @@ void getWindow(window_t * destPtr, int n_proc, int proc_id, struct pam * pamKern
     int right_bottom_pad = kern_width/2;
     int x_offset = pamImage->width/n_columns;
     int y_offset = pamImage->height/n_rows;
-    int row_index = proc_id/n_rows;
-    int col_index = proc_id%n_columns;
+    int row_index = (n_rows==1) ? 0 : proc_id/n_rows;
+    int col_index = (n_columns == 1) ? 0 : proc_id%n_columns;
 
     i_start = row_index * y_offset;
     i_end = (row_index + 1) * y_offset + left_top_pad + right_bottom_pad;

@@ -7,8 +7,14 @@ def getWindow(n_proc, proc_id, kern_width, im_width, im_height):
     right_bottom_pad = int(kern_width/2)
     x_offset = int(im_width/n_columns)
     y_offset = int(im_height/n_rows)
-    row_index = int(proc_id/n_rows)
-    col_index = proc_id%n_columns
+    if (n_rows == 1):
+        row_index = 0
+    else:
+        row_index = int(proc_id/n_rows)
+    if (n_columns == 1):
+        col_index = 0
+    else:
+        col_index = proc_id%n_columns
 
     i_start = row_index * y_offset;
     if row_index == (n_rows-1):
