@@ -21,6 +21,8 @@ typedef struct {
   int i_end;
   int j_start;
   int j_end;
+  int lt_pad;
+  int rb_pad;
 } window_t;
 
 void getWindow(window_t * destPtr, int n_proc, int proc_id, struct pam * pamKernel, struct pam * pamImage) {
@@ -47,6 +49,8 @@ void getWindow(window_t * destPtr, int n_proc, int proc_id, struct pam * pamKern
     j_end = (col_index == n_columns - 1) ? getTotal(kern_width, pamImage->width) : j_end;
     destPtr->j_start = j_start;
     destPtr->j_end = j_end;
+    destPtr->lt_pad = left_top_pad;
+    destPtr->rb_pad = right_bottom_pad;
 }
 
 int getSmallPad(int MaskDim) {
