@@ -78,9 +78,9 @@ double ** loadKernel(struct pam * pamImage) {
     }
   }
   pnm_freepamrow(tuplerow);
-  for (i = 0; i < height; i++) {
-    printf("%.4f    %.4f    %.4f    %.4f    %.4f\n", im[i][0], im[i][1], im[i][2], im[i][3], im[i][4]);
-  }
+  //for (i = 0; i < height; i++) {
+  //  printf("%.4f    %.4f    %.4f    %.4f    %.4f\n", im[i][0], im[i][1], im[i][2], im[i][3], im[i][4]);
+  //}
   return im;
 }
 
@@ -178,31 +178,14 @@ int main(int argc, char **argv) {
   pm_init(argv[0],0);
   pixel_t ** imArray, ** outputImage;
   double ** kerArray;
-  FILE * imageFile = fopen("StopSign2.ppm", "r");
+  //FILE * imageFile = fopen("StopSign2.ppm", "r");
+  FILE * imageFile = fopen(argv[1], "r");
   FILE * maskFile = fopen("gaussian.pgm","r");
-  FILE * output = fopen("output.ppm", "w");
-  FILE * output2 = fopen("output2.ppm", "w");
+  FILE * output = fopen(argv[2], "w");
   pnm_readpaminit(imageFile, &pamImage, PAM_STRUCT_SIZE(tuple_type));
   pnm_readpaminit(maskFile, &pamMask, PAM_STRUCT_SIZE(tuple_type));
   pamOutput = pamImage;
   pamOutput.file = output;
-  pamOutput2 = pamImage;
-  pamOutput2.file = output2;
-  //printf("format: %s\n", inpam.format);
-  printf("size: %d\n", pamImage.size);
-  printf("len: %d\n", pamImage.len);
-  printf("height: %d\n", pamImage.height);
-  printf("width: %d\n", pamImage.width);
-  printf("depth: %d\n", pamImage.depth);
-  printf("max val: %d\n", pamImage.maxval);
-
-  printf("mask info: \n");
-  printf("size: %d\n", pamMask.size);
-  printf("len: %d\n", pamMask.len);
-  printf("height: %d\n", pamMask.height);
-  printf("width: %d\n", pamMask.width);
-  printf("depth: %d\n", pamMask.depth);
-  printf("max val: %d\n", pamMask.maxval);
 
   kerArray = loadKernel(&pamMask);
   imArray = loadRGBImage(&pamImage, &pamMask);
@@ -213,7 +196,6 @@ int main(int argc, char **argv) {
   rewind(imageFile);
   pnm_readpaminit(imageFile, &pamImage, PAM_STRUCT_SIZE(tuple_type));
   writeMatrixToFile(&pamOutput, outputImage, &pamImage, pamImage.height, pamImage.width);
-  // writeMatrixToFile(&pamOutput2, imArray, &pamImage, getTotal(pamMask.height, pamImage.height), getTotal(pamMask.width, pamImage.width));
 
   freeRGBImage(imArray, getTotal(pamMask.height, pamImage.height));
   freeRGBImage(outputImage, pamImage.height);
