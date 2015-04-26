@@ -259,10 +259,10 @@ int main(int argc, char **argv) {
   printf("finished loading\n");
 
 
-  #pragma omp parallel num_threads(n_threads) private(outputImage)
+  #pragma omp parallel num_threads(n_threads)
   {
     window_t my_window;
-    pixel_t ** sub_im;
+    pixel_t ** sub_im, ** sub_out;
     int height, width, totalpad;
 
     int my_thread = omp_get_thread_num();
@@ -270,13 +270,17 @@ int main(int argc, char **argv) {
     printf("I am thread %d of %d\n", my_thread, n_proc);
     getWindow(&my_window, n_threads, my_thread, &pamMask, &pamImage);
     sub_im = copyImgMatrix(imArray, &my_window);
-    int height = (my_window.i_end - my_window.i_start - 1);
-    int width = (my_window.j_end - my_window.j_start - 1);
-    int totalpad = my_window.lt_pad + my_window.rb_pad;
-    outputImage = convolve(sub_im, height-totalpad, width-totalpad, pamImage.maxval, kerArray, &pamMask);
+    height = (my_window.i_end - my_window.i_start);
+    width = (my_window.j_end - my_window.j_start);
+    totalpad = my_window.lt_pad + my_window.rb_pad;
+    sub_out = convolve(sub_im, height-totalpad, width-totalpad, pamImage.maxval, kerArray, &pamMask);
+
+    // stitch here
+
     freeRGBImage(sub_im, height);
-    freeRGBImage(outputImage, height-totalpad);
+    freeRGBImage(sub_out, height-totalpad);
   }
+
   // CLUNKY
   rewind(imageFile);
   pnm_readpaminit(imageFile, &pamImage, PAM_STRUCT_SIZE(tuple_type));
