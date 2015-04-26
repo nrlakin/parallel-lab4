@@ -14,38 +14,51 @@ typedef struct pixel_struct {
   };
 } pixel_t;
 
-pixel_t ** loadRGBImage(struct pam * pamImage) {
+int getSmallPad(int MaskDim) {
+  int pad = (MaskDim / 2) - (1-(MaskDim%2));
+  if (pad < 0) pad = 0;
+  return pad;
+}
+
+int getTotal(int MaskDim, int ImgDim) {
+  int smallPad = getSmallPad(MaskDim);
+  int bigPad = MaskDim / 2;
+  return ImgDim + smallPad + bigPad;
+}
+
+pixel_t ** loadRGBImage(struct pam * pamImage, struct pam * pamMask) {
   tuple *tuplerow;
   pixel_t temp_pixel;
   int i, j;
-  int width = pamImage->width;
-  int height = pamImage->height;
-  int depth = pamImage->depth;
+  int leftPad = getSmallPad(pamMask->width);
+  int topPad = getSmallPad(pamMask->height);
+  int width = getTotal(pamMask->width, pamImage->width);
+  int height = getTotal(pamMask->height, pamImage->height);
+
   tuplerow = pnm_allocpamrow(pamImage);
   printf("allocating image...\n");
   pixel_t ** im = (pixel_t**) malloc(sizeof(pixel_t*)*height);
-  //pixel_t ** im = (pixel_t**) malloc(sizeof(pixel_t)*width*height);
   printf("initializing image...\n");
   for (i = 0; i < height; i++) {
-    pnm_readpamrow(pamImage, tuplerow);
     im[i] = (pixel_t*)malloc(sizeof(pixel_t)*width);
+    if ((topPad <= i) && (i < (topPad + pamImage->height))) {
+      pnm_readpamrow(pamImage, tuplerow);
+    }
     for (j = 0; j < width; j++) {
-      im[i][j].r = tuplerow[j][0];
-      im[i][j].g = tuplerow[j][1];
-      im[i][j].b = tuplerow[j][2];
+      if ((topPad <= i) && (i < (topPad + pamImage->height)) && (leftPad <= j) && (j < (leftPad + pamImage->width))) {
+        im[i][j].r = tuplerow[j-leftPad][0];
+        im[i][j].g = tuplerow[j-leftPad][1];
+        im[i][j].b = tuplerow[j-leftPad][2];
+      } else {
+        im[i][j].r = 0;
+        im[i][j].g = 0;
+        im[i][j].b = 0;
+      }
     }
   }
   pnm_freepamrow(tuplerow);
   printf("allocated image.\n");
   return im;
-}
-
-void freeRGBImage(pixel_t ** image, struct pam * pamImage) {
-  int i;
-  for (i = 0; i < pamImage->height; i++) {
-    free(image[i]);
-  }
-  free(image);
 }
 
 double ** loadKernel(struct pam * pamImage) {
@@ -55,6 +68,7 @@ double ** loadKernel(struct pam * pamImage) {
   int height = pamImage->height;
   int maxval = pamImage->maxval;
   tuplerow = pnm_allocpamrow(pamImage);
+
   double ** im = (double**) malloc(sizeof(double*)*height);
   for (i = 0; i < height; i++) {
     pnm_readpamrow(pamImage, tuplerow);
@@ -70,9 +84,17 @@ double ** loadKernel(struct pam * pamImage) {
   return im;
 }
 
-void freeKernel(double ** image, struct pam * pamImage) {
+void freeRGBImage(pixel_t ** image, int height) {
   int i;
-  for (i = 0; i < pamImage->height; i++) {
+  for (i = 0; i < height; i++) {
+    free(image[i]);
+  }
+  free(image);
+}
+
+void freeKernel(double ** image, int height) {
+  int i;
+  for (i = 0; i < height; i++) {
     free(image[i]);
   }
   free(image);
@@ -98,10 +120,15 @@ pixel_t ** convolve(pixel_t **image, struct pam * pamImage, double **kernel, str
   printf("kernel center_y: %d\n", center_y);
   double temp_result_r, temp_result_g, temp_result_b;
 
-  pixel_t ** result = (pixel_t**) malloc(sizeof(pixel_t*)*(pamImage->height));
-  for(i = 0; i < pamImage->height; i++) {
-    result[i] = (pixel_t*) malloc(sizeof(pixel_t)*pamImage->width);
-    for (j = 0; j < pamImage->width; j++) {
+  int width = getTotal(pamKernel->width, pamImage->width);
+  int height = getTotal(pamKernel->height, pamImage->height);
+  int leftPad = getSmallPad(pamKernel->width);
+  int topPad = getSmallPad(pamKernel->height);
+
+  pixel_t ** result = (pixel_t**) malloc(sizeof(pixel_t*)*pamImage->height);
+  for(i = topPad; i < (topPad + pamImage->height); i++) {
+    result[i-topPad] = (pixel_t*) malloc(sizeof(pixel_t)*pamImage->width);
+    for (j = leftPad; j < (leftPad + pamImage->width); j++) {
       temp_result_r = 0;
       temp_result_g = 0;
       temp_result_b = 0;
@@ -110,7 +137,7 @@ pixel_t ** convolve(pixel_t **image, struct pam * pamImage, double **kernel, str
         for (jk = 0; jk < pamKernel->width; jk++) {
           target_i = i + (ik - center_y);
           target_j = j + (jk - center_x);
-          if (target_i >= 0 && target_i < pamImage->height && target_j >= 0 && target_j < pamImage->width) {
+          if (target_i >= 0 && target_i < height && target_j >= 0 && target_j < width) {
             temp_result_r += ((double)image[target_i][target_j].vector[0])*kernel[ik][jk];
             temp_result_g += ((double)image[target_i][target_j].vector[1])*kernel[ik][jk];
             temp_result_b += ((double)image[target_i][target_j].vector[2])*kernel[ik][jk];
@@ -118,25 +145,25 @@ pixel_t ** convolve(pixel_t **image, struct pam * pamImage, double **kernel, str
           ksum += kernel[ik][jk];
         }
       }
-      result[i][j].r = getPixel(temp_result_r, ksum, pamImage->maxval);
-      result[i][j].g = getPixel(temp_result_g, ksum, pamImage->maxval);
-      result[i][j].b = getPixel(temp_result_b, ksum, pamImage->maxval);
+      result[i-topPad][j-leftPad].r = getPixel(temp_result_r, ksum, pamImage->maxval);
+      result[i-topPad][j-leftPad].g = getPixel(temp_result_g, ksum, pamImage->maxval);
+      result[i-topPad][j-leftPad].b = getPixel(temp_result_b, ksum, pamImage->maxval);
     }
   }
   return result;
 }
 
-void writeMatrixToFile(struct pam * outPam, pixel_t **image, struct pam * imgPam) {
+void writeMatrixToFile(struct pam * outPam, pixel_t **image, struct pam * imgPam, int height, int width) {
   int i, j;
   tuple * tuplerow;
   pnm_writepaminit(outPam);
   tuplerow = pnm_allocpamrow(imgPam);
   printf("Writing output to file.\n");
-  for (i = 0; i < imgPam->height; i++) {
+  for (i = 0; i < height; i++) {
       //printf("reading row %d\n", i);
       pnm_readpamrow(imgPam, tuplerow);
       //printf("read row %d\n", i);
-      for (j = 0; j < imgPam->width; j++) {
+      for (j = 0; j < width; j++) {
         tuplerow[j][0] = image[i][j].r;
         tuplerow[j][1] = image[i][j].g;
         tuplerow[j][2] = image[i][j].b;
@@ -154,10 +181,13 @@ int main(int argc, char **argv) {
   FILE * imageFile = fopen("StopSign2.ppm", "r");
   FILE * maskFile = fopen("gaussian.pgm","r");
   FILE * output = fopen("output.ppm", "w");
+  FILE * output2 = fopen("output2.ppm", "w");
   pnm_readpaminit(imageFile, &pamImage, PAM_STRUCT_SIZE(tuple_type));
   pnm_readpaminit(maskFile, &pamMask, PAM_STRUCT_SIZE(tuple_type));
   pamOutput = pamImage;
   pamOutput.file = output;
+  pamOutput2 = pamImage;
+  pamOutput2.file = output2;
   //printf("format: %s\n", inpam.format);
   printf("size: %d\n", pamImage.size);
   printf("len: %d\n", pamImage.len);
@@ -174,20 +204,20 @@ int main(int argc, char **argv) {
   printf("depth: %d\n", pamMask.depth);
   printf("max val: %d\n", pamMask.maxval);
 
-  imArray = loadRGBImage(&pamImage);
   kerArray = loadKernel(&pamMask);
+  imArray = loadRGBImage(&pamImage, &pamMask);
+  printf("finished loading\n");
 
   outputImage = convolve(imArray, &pamImage, kerArray, &pamMask);
   // CLUNKY
   rewind(imageFile);
   pnm_readpaminit(imageFile, &pamImage, PAM_STRUCT_SIZE(tuple_type));
-  writeMatrixToFile(&pamOutput, outputImage, &pamImage);
-  //writeMatrixToFile(&pamOutput, outputImage, &pamImage);
+  writeMatrixToFile(&pamOutput, outputImage, &pamImage, pamImage.height, pamImage.width);
+  // writeMatrixToFile(&pamOutput2, imArray, &pamImage, getTotal(pamMask.height, pamImage.height), getTotal(pamMask.width, pamImage.width));
 
-
-  freeRGBImage(imArray, &pamImage);
-  freeRGBImage(outputImage, &pamOutput);
-  freeKernel(kerArray, &pamMask);
+  freeRGBImage(imArray, getTotal(pamMask.height, pamImage.height));
+  freeRGBImage(outputImage, pamImage.height);
+  freeKernel(kerArray, pamMask.height);
 
   fclose(imageFile);
   fclose(maskFile);
