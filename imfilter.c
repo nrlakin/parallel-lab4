@@ -90,7 +90,7 @@ int getPixel(double temp_pixel, double ksum, int maxval) {
 }
 
 pixel_t ** convolve(pixel_t **image, struct pam * pamImage, double **kernel, struct pam * pamKernel) {
-  int i, j, k, ik, jk, ii, jj, target_i, target_j;
+  int i, j, k, ik, jk, target_i, target_j;
   double ksum = 0;
   int center_x = pamKernel->width/2;
   int center_y = pamKernel->height/2;
@@ -107,19 +107,15 @@ pixel_t ** convolve(pixel_t **image, struct pam * pamImage, double **kernel, str
       temp_result_b = 0;
       ksum = 0;
       for (ik = 0; ik < pamKernel->height; ik++) {
-        // using algorithm where we multiply by flipped kernel
-        ii = pamKernel->height - 1 - ik;
         for (jk = 0; jk < pamKernel->width; jk++) {
-          // using algorithm where we multiply by flipped kernel
-          jj = pamKernel->width - 1 - jk;
           target_i = i + (ik - center_y);
           target_j = j + (jk - center_x);
-          if (target_i >= 0 && target_i < pamImage->height && target_j >= 0 && target_j < pamImage->width){
-            temp_result_r += ((double)image[target_i][target_j].vector[0])*kernel[ii][jj];
-            temp_result_g += ((double)image[target_i][target_j].vector[1])*kernel[ii][jj];
-            temp_result_b += ((double)image[target_i][target_j].vector[2])*kernel[ii][jj];
-            ksum += kernel[ik][jk];
+          if (target_i >= 0 && target_i < pamImage->height && target_j >= 0 && target_j < pamImage->width) {
+            temp_result_r += ((double)image[target_i][target_j].vector[0])*kernel[ik][jk];
+            temp_result_g += ((double)image[target_i][target_j].vector[1])*kernel[ik][jk];
+            temp_result_b += ((double)image[target_i][target_j].vector[2])*kernel[ik][jk];
           }
+          ksum += kernel[ik][jk];
         }
       }
       result[i][j].r = getPixel(temp_result_r, ksum, pamImage->maxval);
