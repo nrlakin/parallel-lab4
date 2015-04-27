@@ -21,36 +21,43 @@ typedef struct {
   int i_end;
   int j_start;
   int j_end;
-  int lt_pad;
-  int rb_pad;
+  int l_pad;
+  int r_pad;
+  int t_pad;
+  int b_pad;
 } window_t;
 
 void getWindow(window_t * destPtr, int n_proc, int proc_id, struct pam * pamKernel, struct pam * pamImage) {
     int n_rows = (int)sqrt(n_proc);
+    while(n_proc%n_rows)n_rows--;
     int n_columns = n_proc/n_rows;
     int kern_width = pamKernel->width;
     int kern_height = pamKernel->height;
     int i_start, i_end, j_start, j_end;
-    int left_top_pad = getSmallPad(kern_width);
-    int right_bottom_pad = kern_width/2;
+    int left_pad = getSmallPad(kern_width);
+    int top_pad = getSmallPad(kern_height);
+    int right_pad = kern_width/2;
+    int bottom_pad = kern_height/2;
     int x_offset = pamImage->width/n_columns;
     int y_offset = pamImage->height/n_rows;
-    int row_index = (n_rows==1) ? 0 : proc_id/n_rows;
-    int col_index = (n_columns == 1) ? 0 : proc_id%n_columns;
+    int row_index = proc_id/(n_proc/n_rows);
+    int col_index = proc_id%n_columns;
 
     i_start = row_index * y_offset;
-    i_end = (row_index + 1) * y_offset + left_top_pad + right_bottom_pad;
+    i_end = (row_index + 1) * y_offset + top_pad + bottom_pad;
     i_end = (row_index == n_rows-1) ? getTotal(kern_height, pamImage->height) : i_end;
     destPtr->i_start = i_start;
     destPtr->i_end = i_end;
 
     j_start = col_index * x_offset;
-    j_end = (col_index + 1) * x_offset + left_top_pad + right_bottom_pad;
+    j_end = (col_index + 1) * x_offset + left_pad + right_pad;
     j_end = (col_index == n_columns - 1) ? getTotal(kern_width, pamImage->width) : j_end;
     destPtr->j_start = j_start;
     destPtr->j_end = j_end;
-    destPtr->lt_pad = left_top_pad;
-    destPtr->rb_pad = right_bottom_pad;
+    destPtr->l_pad = left_pad;
+    destPtr->r_pad = right_pad;
+    destPtr->t_pad = top_pad;
+    destPtr->b_pad = bottom_pad;
 }
 
 int getSmallPad(int MaskDim) {
@@ -150,25 +157,32 @@ int getPixel(double temp_pixel, double ksum, int maxval) {
   return (int) temp_pixel;
 }
 
-pixel_t ** convolve(pixel_t **image, int img_height, int img_width, int img_maxval, double **kernel, struct pam * pamKernel) {
+pixel_t ** convolve(pixel_t **image, window_t * window, int img_maxval, double **kernel, struct pam * pamKernel) {
   int i, j, k, ik, jk, target_i, target_j;
+  int width = window->j_end - window->j_start;
+  int height = window->i_end - window->i_start;
+  int img_height = height - (window->t_pad + window->b_pad);
+  int img_width = width - (window->l_pad + window->r_pad);
   double ksum = 0;
-  int center_x = pamKernel->width/2;
-  int center_y = pamKernel->height/2;
+  int center_x = (pamKernel->width-1)/2;
+  int center_y = (pamKernel->height-1)/2;
   // printf("kernel center_x: %d\n", center_x);
   // printf("kernel center_y: %d\n", center_y);
   double temp_result_r, temp_result_g, temp_result_b;
 
-  int width = getTotal(pamKernel->width, img_width);
-  int height = getTotal(pamKernel->height, img_height);
-  int leftPad = getSmallPad(pamKernel->width);
-  int topPad = getSmallPad(pamKernel->height);
+  //int width = getTotal(pamKernel->width, img_width);
+  //int height = getTotal(pamKernel->height, img_height);
+  int leftPad = window->l_pad;
+  int topPad = window->t_pad;
 
+  if(omp_get_thread_num()==0) {
+    printf("leftPad=%d\n",leftPad);
+  }
   pixel_t ** result = (pixel_t**) malloc(sizeof(pixel_t*)*img_height);
   for(i = topPad; i < (topPad + img_height); i++) {
     result[i-topPad] = (pixel_t*) malloc(sizeof(pixel_t)*img_width);
     for (j = leftPad; j < (leftPad + img_width); j++) {
-      printf("working on px: %d, %d\n", i, j);
+      //printf("working on px: %d, %d\n", i, j);
       temp_result_r = 0;
       temp_result_g = 0;
       temp_result_b = 0;
@@ -216,32 +230,36 @@ void writeMatrixToFile(struct pam * outPam, pixel_t **image, struct pam * imgPam
 pixel_t ** copyImgMatrix(pixel_t ** whole_img, window_t * window) {
   int i, j;
   printf("window gotten: %d, %d, %d, %d\n", window->i_start, window->i_end,window->j_start,window->j_end);
-  int height = (window->i_end - window->i_start - 1);
-  int width = (window->j_end - window->j_start - 1);
+  int height = (window->i_end - window->i_start);
+  int width = (window->j_end - window->j_start);
   // printf("mallocing window rows\n");
   pixel_t ** sub_img = (pixel_t**) malloc(sizeof(pixel_t*)*(height));
+  //printf ("malloc'd rows on %d\n", omp_get_thread_num());
   for (i = window->i_start; i < window->i_end; i++) {
-    sub_img[i] = (pixel_t*)malloc(sizeof(pixel_t)*width);
+    sub_img[i-window->i_start] = (pixel_t*)malloc(sizeof(pixel_t)*width);
     for (j = window->j_start; j < window->j_end; j++) {
-        sub_img[i][j].r = whole_img[i][j].r;
-        sub_img[i][j].g = whole_img[i][j].g;
-        sub_img[i][j].b = whole_img[i][j].b;
+        sub_img[i-window->i_start][j-window->j_start].r = whole_img[i][j].r;
+        sub_img[i-window->i_start][j-window->j_start].g = whole_img[i][j].g;
+        sub_img[i-window->i_start][j-window->j_start].b = whole_img[i][j].b;
     }
   }
   return sub_img;
 }
 
-void copyBack(pixel_t ** subImage, pixel_t ** destImage, window_t * window) {
-  int i_start = window->i_start + window->lt_pad;
-  int i_end = window->i_end - window->rb_pad;
-  int j_start = window->j_start + window->lt_pad;
-  int j_end = window->j_end - window_rb_pad;
+void copyResult(pixel_t ** subImage, pixel_t ** destImage, window_t * window) {
+  int i_start = window->i_start + window->t_pad;
+  int i_end = window->i_end - window->b_pad;
+  int j_start = window->j_start + window->l_pad;
+  int j_end = window->j_end - window->r_pad;
   int i, j, k;
   for (i = i_start; i < i_end; i++) {
     for (j = j_start; j < j_end; j++) {
-      for (k = 0; k < 3; k++) {
-        destImage[i][j].vector[k] = subImage[i-i_start][j-j_start].vector[k];
-      }
+      //for (k = 0; k < 3; k++) {
+        //destImage[i][j].vector[k] = subImage[i-i_start][j-j_start].vector[k];
+        destImage[i][j].r = subImage[i-i_start][j-j_start].r;
+        destImage[i][j].g = subImage[i-i_start][j-j_start].g;
+        destImage[i][j].b = subImage[i-i_start][j-j_start].b;
+      //}
     }
   }
 }
@@ -261,10 +279,11 @@ int main(int argc, char **argv) {
   //}
   //FILE * imageFile = fopen("StopSign2.ppm", "r");
   FILE * imageFile = fopen(argv[1], "r");
-  FILE * maskFile = fopen("gaussian.pgm","r");
+  //FILE * maskFile = fopen("sobel_x.pgm","r");
   FILE * output = fopen(argv[2], "w");
-  int n_threads = atoi(argv[3]);
-  int n_iter = atoi(argv[4]);
+  FILE * maskFile = fopen(argv[3],"r");
+  int n_threads = atoi(argv[4]);
+  int n_iter = atoi(argv[5]);
   pnm_readpaminit(imageFile, &pamImage, PAM_STRUCT_SIZE(tuple_type));
   pnm_readpaminit(maskFile, &pamMask, PAM_STRUCT_SIZE(tuple_type));
   pamOutput = pamImage;
@@ -275,31 +294,37 @@ int main(int argc, char **argv) {
   printf("finished loading\n");
 
 
-  #pragma omp parallel num_threads(n_threads) shared(imArray)
+  #pragma omp parallel num_threads(n_threads) shared(imArray, n_iter)
   {
     window_t my_window;
     pixel_t ** sub_im, ** sub_out;
-    int height, width, totalpad;
+    int height, width, totalpad, t;
 
     int my_thread = omp_get_thread_num();
     int n_proc = omp_get_num_threads();
     printf("I am thread %d of %d\n", my_thread, n_proc);
     getWindow(&my_window, n_threads, my_thread, &pamMask, &pamImage);
-    sub_im = copyImgMatrix(imArray, &my_window);
-    printf("window copied\n");
-    height = (my_window.i_end - my_window.i_start);
-    width = (my_window.j_end - my_window.j_start);
-    totalpad = my_window.lt_pad + my_window.rb_pad;
-    sub_out = convolve(sub_im, height-totalpad, width-totalpad, pamImage.maxval, kerArray, &pamMask);
-
+    #pragma omp barrier
+    //printf("thread %d got window.\n", my_thread);
+    for(t = 0; t < n_iter; t++) {
+      sub_im = copyImgMatrix(imArray, &my_window);
+      //printf("window copied\n");
+      height = (my_window.i_end - my_window.i_start);
+      width = (my_window.j_end - my_window.j_start);
+      //totalpad = my_window.lt_pad + my_window.rb_pad;
+      //sub_out = convolve(sub_im, height-totalpad, width-totalpad, pamImage.maxval, kerArray, &pamMask);
+      sub_out = convolve(sub_im, &my_window, pamImage.maxval, kerArray, &pamMask);
+      printf("got through convolution...\n");
     // stitch here
-  #pragma omp critical
-  {
-    copyResult(sub_out, imArray, &window);
-  }
+    #pragma omp critical
+    {
+      copyResult(sub_out, imArray, &my_window);
+    }
 
-    freeRGBImage(sub_im, height);
-    freeRGBImage(sub_out, height-totalpad);
+      freeRGBImage(sub_im, height);
+      freeRGBImage(sub_out, height-(my_window.t_pad+my_window.b_pad));
+    #pragma omp barrier
+    }
   }
 
   // CLUNKY
