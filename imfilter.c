@@ -82,9 +82,9 @@ pixel_t ** loadRGBImage(struct pam * pamImage, struct pam * pamMask) {
   int height = getTotal(pamMask->height, pamImage->height);
 
   tuplerow = pnm_allocpamrow(pamImage);
-  printf("allocating image...\n");
+  // printf("allocating image...\n");
   pixel_t ** im = (pixel_t**) malloc(sizeof(pixel_t*)*height);
-  printf("initializing image...\n");
+  // printf("initializing image...\n");
   for (i = 0; i < height; i++) {
     im[i] = (pixel_t*)malloc(sizeof(pixel_t)*width);
     if ((topPad <= i) && (i < (topPad + pamImage->height))) {
@@ -103,7 +103,7 @@ pixel_t ** loadRGBImage(struct pam * pamImage, struct pam * pamMask) {
     }
   }
   pnm_freepamrow(tuplerow);
-  printf("allocated image.\n");
+  // printf("allocated image.\n");
   return im;
 }
 
@@ -175,9 +175,9 @@ pixel_t ** convolve(pixel_t **image, window_t * window, int img_maxval, double *
   int leftPad = window->l_pad;
   int topPad = window->t_pad;
 
-  if(omp_get_thread_num()==0) {
-    printf("leftPad=%d\n",leftPad);
-  }
+  // if(omp_get_thread_num()==0) {
+  //   printf("leftPad=%d\n",leftPad);
+  // }
   pixel_t ** result = (pixel_t**) malloc(sizeof(pixel_t*)*img_height);
   for(i = topPad; i < (topPad + img_height); i++) {
     result[i-topPad] = (pixel_t*) malloc(sizeof(pixel_t)*img_width);
@@ -212,7 +212,7 @@ void writeMatrixToFile(struct pam * outPam, pixel_t **image, struct pam * imgPam
   tuple * tuplerow;
   pnm_writepaminit(outPam);
   tuplerow = pnm_allocpamrow(imgPam);
-  printf("Writing output to file.\n");
+  // printf("Writing output to file.\n");
   for (i = 0; i < height; i++) {
       //printf("reading row %d\n", i);
       pnm_readpamrow(imgPam, tuplerow);
@@ -229,7 +229,7 @@ void writeMatrixToFile(struct pam * outPam, pixel_t **image, struct pam * imgPam
 
 pixel_t ** copyImgMatrix(pixel_t ** whole_img, window_t * window) {
   int i, j;
-  printf("window gotten: %d, %d, %d, %d\n", window->i_start, window->i_end,window->j_start,window->j_end);
+  // printf("window gotten: %d, %d, %d, %d\n", window->i_start, window->i_end,window->j_start,window->j_end);
   int height = (window->i_end - window->i_start);
   int width = (window->j_end - window->j_start);
   // printf("mallocing window rows\n");
@@ -291,7 +291,7 @@ int main(int argc, char **argv) {
 
   kerArray = loadKernel(&pamMask);
   imArray = loadRGBImage(&pamImage, &pamMask);
-  printf("finished loading\n");
+  // printf("finished loading\n");
 
 
   #pragma omp parallel num_threads(n_threads) shared(imArray, n_iter)
@@ -302,7 +302,7 @@ int main(int argc, char **argv) {
 
     int my_thread = omp_get_thread_num();
     int n_proc = omp_get_num_threads();
-    printf("I am thread %d of %d\n", my_thread, n_proc);
+    // printf("I am thread %d of %d\n", my_thread, n_proc);
     getWindow(&my_window, n_threads, my_thread, &pamMask, &pamImage);
     #pragma omp barrier
     //printf("thread %d got window.\n", my_thread);
