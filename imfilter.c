@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <netpbm/pam.h>
 
+/*** Structure representing a single pixel. Values are 0-255; use ints to
+  prevent overflow during normalization.  ***/
 typedef struct pixel_struct {
   union {
     struct {
@@ -16,6 +18,7 @@ typedef struct pixel_struct {
   };
 } pixel_t;
 
+/*** Structure for keeping track of image subwindow geometry. ***/
 typedef struct {
   int i_start;
   int i_end;
@@ -27,6 +30,12 @@ typedef struct {
   int b_pad;
 } window_t;
 
+/***
+  void getWindow(window_t * destPtr, int n_proc, int proc_id, struct pam * pamKernel, struct pam * pamImage)
+
+  Populate window_t structure *destPtr with window parameters given processor
+  id, number of processors, and image/kernel geometries.
+***/
 void getWindow(window_t * destPtr, int n_proc, int proc_id, struct pam * pamKernel, struct pam * pamImage) {
     int n_rows = (int)sqrt(n_proc);
     while(n_proc%n_rows)n_rows--;
@@ -60,18 +69,37 @@ void getWindow(window_t * destPtr, int n_proc, int proc_id, struct pam * pamKern
     destPtr->b_pad = bottom_pad;
 }
 
+/***
+  int getSmallPad(int MaskDim)
+
+  Helper function to get right/bottom pad given x/y dimension.
+
+***/
 int getSmallPad(int MaskDim) {
   int pad = (MaskDim / 2) - (1-(MaskDim%2));
   if (pad < 0) pad = 0;
   return pad;
 }
 
+/***
+  int getTotal(int MaskDim, int ImgDim)
+
+  Helper function to calculate total dimensions of image after adding '0'
+  padding.
+
+***/
 int getTotal(int MaskDim, int ImgDim) {
   int smallPad = getSmallPad(MaskDim);
   int bigPad = MaskDim / 2;
   return ImgDim + smallPad + bigPad;
 }
 
+/***
+  pixel_t ** loadRGBImage(struct pam * pamImage, struct pam * pamMask)
+
+  Return 2-D array of pixels, with a padding of zeroes around the image, given
+  pam structures for the image and kernel.
+***/
 pixel_t ** loadRGBImage(struct pam * pamImage, struct pam * pamMask) {
   tuple *tuplerow;
   pixel_t temp_pixel;
@@ -107,6 +135,12 @@ pixel_t ** loadRGBImage(struct pam * pamImage, struct pam * pamMask) {
   return im;
 }
 
+/***
+  double ** loadKernel(struct pam * pamImage)
+
+  Return a 2D array of doubles representing the convolution kernel, given a
+  pam struct representing the pgm file.
+***/
 double ** loadKernel(struct pam * pamImage) {
   tuple *tuplerow;
   int i, j;
@@ -130,6 +164,11 @@ double ** loadKernel(struct pam * pamImage) {
   return im;
 }
 
+/***
+  void freeRGBImage(pixel_t ** image, int height)
+
+  Helper function to free memory for 2D array representing image.
+***/
 void freeRGBImage(pixel_t ** image, int height) {
   int i;
   for (i = 0; i < height; i++) {
@@ -138,6 +177,11 @@ void freeRGBImage(pixel_t ** image, int height) {
   free(image);
 }
 
+/***
+  void freeKernel(double ** image, int height)
+
+  Helper function to free memory for 2D array representing kernel.
+***/
 void freeKernel(double ** image, int height) {
   int i;
   for (i = 0; i < height; i++) {
@@ -146,6 +190,11 @@ void freeKernel(double ** image, int height) {
   free(image);
 }
 
+/***
+  int getPixel(double temp_pixel, double ksum, int maxval)
+
+  Normalize (roughly) a single pixel after a convolution.
+***/
 int getPixel(double temp_pixel, double ksum, int maxval) {
   if (ksum <= 0) ksum = 1;
   temp_pixel /= ksum;
@@ -157,6 +206,16 @@ int getPixel(double temp_pixel, double ksum, int maxval) {
   return (int) temp_pixel;
 }
 
+/***
+  pixel_t ** convolve(pixel_t **image, window_t * window, int img_maxval, double **kernel, struct pam * pamKernel)
+
+  Given 2D arrays for image (including padding) and kernel, return a pointer to
+  a 2D array representing the output.  Input can be a whole image or a subwindow
+  of the image.  Geometric data about the image is passed in window_t; geometric
+  information about the kernel is included in the pamKernel structure.  Note
+  that the output image is not padded in any way and so may have different
+  dimensions than the input image.
+***/
 pixel_t ** convolve(pixel_t **image, window_t * window, int img_maxval, double **kernel, struct pam * pamKernel) {
   int i, j, k, ik, jk, target_i, target_j;
   int width = window->j_end - window->j_start;
@@ -207,6 +266,12 @@ pixel_t ** convolve(pixel_t **image, window_t * window, int img_maxval, double *
   return result;
 }
 
+/***
+  void writeMatrixToFile(struct pam * outPam, pixel_t **image, struct pam * imgPam, int height, int width)
+
+  Given pointer to output pam structure (which implies an output ppm file) and
+  a 2D image array, write output to file.
+***/
 void writeMatrixToFile(struct pam * outPam, pixel_t **image, struct pam * imgPam, int height, int width) {
   int i, j;
   tuple * tuplerow;
@@ -227,6 +292,13 @@ void writeMatrixToFile(struct pam * outPam, pixel_t **image, struct pam * imgPam
   pnm_freepamrow(tuplerow);
 }
 
+/***
+  pixel_t ** copyImgMatrix(pixel_t ** whole_img, window_t * window)
+
+  Copy a subwindow of an image to a new 2D array.  Rather than have all
+  processors read the same global array, copy subwindows to local arrays and
+  write output to shared memory after convolving.
+***/
 pixel_t ** copyImgMatrix(pixel_t ** whole_img, window_t * window) {
   int i, j;
   // printf("window gotten: %d, %d, %d, %d\n", window->i_start, window->i_end,window->j_start,window->j_end);
@@ -246,6 +318,11 @@ pixel_t ** copyImgMatrix(pixel_t ** whole_img, window_t * window) {
   return sub_img;
 }
 
+/***
+  void copyResult(pixel_t ** subImage, pixel_t ** destImage, window_t * window)
+
+  Helper function to copy result subwindow back to shared memory.
+***/
 void copyResult(pixel_t ** subImage, pixel_t ** destImage, window_t * window) {
   int i_start = window->i_start + window->t_pad;
   int i_end = window->i_end - window->b_pad;
@@ -264,6 +341,7 @@ void copyResult(pixel_t ** subImage, pixel_t ** destImage, window_t * window) {
   }
 }
 
+/*** Main function. ***/
 int main(int argc, char **argv) {
   int opt;
   struct pam pamImage, pamMask, pamOutput;
@@ -272,14 +350,8 @@ int main(int argc, char **argv) {
   double ** kerArray;
   char *infile, *outfile;
 
-  //while ((opt = getopt(argc, argv, "oin")) != -1) {
-  //  switch(opt) {
-  //    case 'o': outfile =
-  //  }
-  //}
-  //FILE * imageFile = fopen("StopSign2.ppm", "r");
+  // Very brittle reading in command line args...
   FILE * imageFile = fopen(argv[1], "r");
-  //FILE * maskFile = fopen("sobel_x.pgm","r");
   FILE * output = fopen(argv[2], "w");
   FILE * maskFile = fopen(argv[3],"r");
   int n_threads = atoi(argv[4]);
@@ -294,6 +366,7 @@ int main(int argc, char **argv) {
   // printf("finished loading\n");
 
 
+  // Begin parallel part.
   #pragma omp parallel num_threads(n_threads) shared(imArray, n_iter)
   {
     window_t my_window;
@@ -304,6 +377,8 @@ int main(int argc, char **argv) {
     int n_proc = omp_get_num_threads();
     // printf("I am thread %d of %d\n", my_thread, n_proc);
     getWindow(&my_window, n_threads, my_thread, &pamMask, &pamImage);
+
+    // Make sure everyone reads before writing output...
     #pragma omp barrier
     //printf("thread %d got window.\n", my_thread);
     for(t = 0; t < n_iter; t++) {
@@ -311,11 +386,10 @@ int main(int argc, char **argv) {
       //printf("window copied\n");
       height = (my_window.i_end - my_window.i_start);
       width = (my_window.j_end - my_window.j_start);
-      //totalpad = my_window.lt_pad + my_window.rb_pad;
-      //sub_out = convolve(sub_im, height-totalpad, width-totalpad, pamImage.maxval, kerArray, &pamMask);
       sub_out = convolve(sub_im, &my_window, pamImage.maxval, kerArray, &pamMask);
       printf("got through convolution...\n");
-    // stitch here
+
+    // Only one processor writes to common output at a time
     #pragma omp critical
     {
       copyResult(sub_out, imArray, &my_window);
@@ -323,6 +397,8 @@ int main(int argc, char **argv) {
 
       freeRGBImage(sub_im, height);
       freeRGBImage(sub_out, height-(my_window.t_pad+my_window.b_pad));
+
+    // Let everyone finish before next iteration. Not pretty.
     #pragma omp barrier
     }
   }
